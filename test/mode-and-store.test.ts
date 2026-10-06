@@ -60,7 +60,9 @@ describe('IncognitoSessionStore', () => {
 		expect(slice.eventState).toBe('detached');
 		expect(slice.events).toHaveLength(2);
 		// Caller-owned copies: mutating the read result must not touch the buffer.
-		(slice.events as SessionEvent[])[0].seq = SessionSeq(99);
+		const mutated = (slice.events as SessionEvent[]).at(0);
+		expect(mutated).toBeDefined();
+		mutated!.seq = SessionSeq(99);
 		expect((await handle.read(0, 1)).events.at(0)).toMatchObject({ seq: 0 });
 	});
 
