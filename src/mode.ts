@@ -12,7 +12,9 @@ export function parseIncognitoEnv(value: string | undefined): IncognitoMode {
 
 /**
  * Single owner of the persistence mode enum. `create()` stamps the current
- * mode onto a session for life; toggling never touches live sessions.
+ * mode onto a session at call time. Toggling ON also converts the current
+ * live session to in-memory (facade-driven); toggling OFF only affects
+ * sessions created afterwards.
  */
 export class ModeStore {
 	private mode: IncognitoMode;
