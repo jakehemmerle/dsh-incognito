@@ -49,7 +49,9 @@ One facade service over two backends, routed by ownership, not by current mode.
 
 - `ModeStore`. One enum `'persist' | 'incognito'`, one owner, created in `apply()`. Initial value
   parsed once from `DSH_INCOGNITO` (or config). `/incognito` toggles it. Mode is stamped onto a
-  session at `create()` time and decides its backing for life. Toggling never touches a live session.
+  session at `create()` time and decides the backing of *newly created* sessions. Toggling ON
+  additionally converts the current live session in place (see the facade bullet); toggling OFF
+  affects only sessions created afterwards.
 - Inner backend. `new JsonlSessionPersistence(childCtx, config)` inside `apply()`. Its tracker
   listeners install on the child context; Cordis events fan out tree-wide, so agent emissions reach
   it. Construction failure enters degraded mode (log loudly, all sessions in-memory) instead of
@@ -67,6 +69,19 @@ One facade service over two backends, routed by ownership, not by current mode.
   route by whether the incognito store owns the id, else delegate to the inner backend. `flush()`
   drains inner handles and resolves incognito handles. The store installs listeners that filter to
   incognito-owned ids; the inner tracker owns the rest. Disjoint by construction.
+- `FacadeWriteHandle`. Every write handle the facade issues (from `create()` and `open('write')`)
+  wraps a swappable backing: the durable inner handle or the in-memory buffer. All operations
+  delegate to the live backing, so mid-session conversion swaps the backing under the caller's
+  feet without ever opening a new session.
+- Mid-session conversion (`facade.toggle()`, driven by `/incognito`). Read-then-close-then-wipe-
+  then-buffer, in that order: the full log is read from the durable handle first (pre-toggle
+  events survive in memory), then `close()` drains any in-flight durability work and releases
+  single-writer ownership, and only then is the session's directory under the configured root
+  removed (`rmSync` recursive; a path outside the root refuses loudly, and a delete failure
+  propagates — the wipe is never pretended). The buffer is registered in the incognito store and
+  swapped in as the handle's backing; the inner tracker has no active write handle for the id, and
+  per the contract a published session without one persists nothing. Converting an
+  already-in-memory session is a no-op besides the mode.
 - `stat`/`list` include incognito sessions process-locally (`eventCount`, no `sizeBytes`). After
   restart they never existed; resume throws `SessionPersistenceNotFoundError`. That is the feature.
 - Contract errors propagate unchanged. Never swallow `SessionAlreadyExistsError`,
@@ -79,11 +94,12 @@ One facade service over two backends, routed by ownership, not by current mode.
 | `src/index.ts` | Plugin entry: `name`, `apply(ctx)`; wires config, mode store, inner backend, facade, command. |
 | `src/types.ts` | `IncognitoMode`, `IncognitoPluginConfig` (structurally the JSONL backend config). |
 | `src/mode.ts` | `ModeStore`: env parsing, toggle, single owner of the enum. |
-| `src/service.ts` | Facade over inner backend + incognito store; ownership routing. |
+| `src/service.ts` | Facade over inner backend + incognito store; ownership routing; mid-session conversion. |
+| `src/facade-handle.ts` | Facade-level write handle with a runtime-swappable backing (durable ↔ in-memory). |
 | `src/incognito-store.ts` | In-memory sessions, single-writer ownership, snapshots. |
 | `src/incognito-handle.ts` | `SessionHandle` over the buffer. |
 | `src/command.ts` | `/incognito` registration. |
-| `test/` | Unit tests, property tests, contract-style tests. |
+| `test/` | Unit tests, property tests (store + full toggle lifecycle over the real backend), contract-style tests. |
 | `harness/` | Whole-binary verification (below). |
 
 ## Harness (core verification)

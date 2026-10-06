@@ -26,11 +26,22 @@ disabled so exactly one `sessionPersistence` provider exists:
 
 ## Usage
 
-- `/incognito` toggles the mode at runtime in the TUI. Toggling only affects
-  sessions created afterwards; live sessions keep their backing for life.
+- `/incognito` toggles the mode at runtime in the TUI.
+  - **On (mid-session conversion).** The CURRENT session stays the same
+    session — a new one is never opened. Its on-disk log is wiped (the session
+    directory under `sessions/` is removed), and nothing further in that
+    session is ever flushed to disk for the rest of its life, even if the
+    session continues. The in-memory log keeps every event that was already
+    written before the toggle, so reads, checkpoints, and projections keep
+    working unchanged (read-your-writes across the conversion).
+  - **Off.** No durability promise for the rest of the current session: the
+    live session keeps its in-memory backing until it ends. The next session
+    created in persist mode (e.g. after `/new`) persists to disk normally.
 - `DSH_INCOGNITO=1` sets the initial mode at boot (headless cannot run slash
   commands). Parsed once at plugin apply time; truthy spellings
-  (`1`/`true`/`yes`/`on`, case-insensitive) select incognito.
+  (`1`/`true`/`yes`/`on`, case-insensitive) select incognito. Every session
+  then starts in-memory with zero disk writes — the previous behavior for
+  sessions created in incognito mode.
 
 Incognito sessions are full in-memory sessions: reads, appends, checkpoints,
 and projections all work, but nothing is written under `sessions/`.
@@ -56,7 +67,12 @@ process exits non-zero on any failure.
 
 `pnpm test` runs vitest unit tests and fast-check property tests over the
 in-memory store and handle (contiguity, read-your-writes, stat/list
-consistency, single-writer ownership, double-close, flush-after-close).
+consistency, single-writer ownership, double-close, flush-after-close), plus
+toggle-lifecycle properties that drive the real facade with the real JSONL
+backend on a per-run temp root: no file for a converted session exists at any
+point after toggle-on, read-your-writes holds across the conversion, the wipe
+is real, the next persist-mode session materializes while incognito ones never
+do, and two-session interleavings keep the routing disjoint.
 
 ## Limitations
 
