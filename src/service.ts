@@ -1,3 +1,4 @@
+import { mkdirSync } from 'node:fs';
 import { Context } from '@deepseek-ai/cordis';
 import {
 	SessionPersistence,
@@ -46,13 +47,16 @@ export class IncognitoSessionPersistence extends SessionPersistence {
 
 	/** Construct the inner durable backend on a child context. Failure enters degraded mode. */
 	attachInner(): void {
-		const childCtx = this.ctx.extend();
+		mkdirSync(this.config.root, { recursive: true });
+		const childCtx = this.ctx.extend().isolate('sessionPersistence');
 		try {
 			this.inner = new JsonlSessionPersistence(childCtx as never, {
 				root: this.config.root,
 				...(this.config.compression !== undefined ? { compression: this.config.compression } : {}),
 			}) as JsonlSessionPersistence;
 		} catch (error) {
+			// eslint-disable-next-line no-console
+			console.error('[dsh-incognito] inner backend construction failed:', String(error));
 			this.inner = null;
 			this.logger.warn(`dsh-incognito: durable backend failed to start (${String(error)}); all sessions are in-memory and never touch disk`);
 		}
