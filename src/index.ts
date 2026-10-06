@@ -12,6 +12,7 @@ export { IncognitoSessionPersistence } from './service.ts';
 export type { IncognitoMode, IncognitoPluginConfig } from './types.ts';
 
 const name = 'dsh-incognito';
+const inject = ['commands'];
 
 /**
  * dsh-incognito plugin entry. Wires the mode store (initial value parsed once
@@ -35,4 +36,4 @@ function apply(ctx: Context, config: IncognitoPluginConfig): void {
 	void facade;
 }
 
-export { apply, name };
+export { apply, inject, name };
