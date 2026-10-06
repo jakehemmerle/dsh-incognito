@@ -1,9 +1,11 @@
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, rmSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
 import { Context } from '@deepseek-ai/cordis';
 import {
 	SessionPersistence,
 	SessionPersistenceNotFoundError,
 } from '@deepseek-ai/dsh-session-persistence';
+import { FacadeWriteHandle } from './facade-handle.ts';
 import type {
 	SessionHandle,
 	SessionPersistenceCreateOptions,
@@ -18,7 +20,7 @@ import type { SessionEvent, SessionHeader, SessionId } from '@deepseek-ai/dsh-se
 import JsonlSessionPersistence from '@deepseek-ai/dsh-session-persistence-jsonl';
 import { IncognitoSessionStore } from './incognito-store.ts';
 import { ModeStore } from './mode.ts';
-import type { IncognitoPluginConfig, ResolvedPluginConfig } from './types.ts';
+import type { IncognitoMode, IncognitoPluginConfig, ResolvedPluginConfig } from './types.ts';
 
 /**
  * Facade persistence service over two backends, routed by ownership, not by
@@ -36,6 +38,8 @@ export class IncognitoSessionPersistence extends SessionPersistence {
 	private readonly config: ResolvedPluginConfig;
 	private inner: JsonlSessionPersistence | null = null;
 	private readonly logger: { info(message: string): unknown; warn(message: string): unknown };
+	/** Live facade write handles by id; the most recent is the conversion target. */
+	private readonly activeWrites = new Map<SessionId, FacadeWriteHandle>();
 
 	constructor(ctx: Context, config: ResolvedPluginConfig, modeStore: ModeStore, logger: { info(message: string): unknown; warn(message: string): unknown }) {
 		super(ctx);
@@ -75,17 +79,86 @@ export class IncognitoSessionPersistence extends SessionPersistence {
 				this.logger.warn(`dsh-incognito: degraded mode accepted create for session "${header.id}" in memory`);
 			}
 			const prefix = await this.resolveInheritedPrefix(header, SessionLogOffset(inheritedEventCount ?? 0), options?.signal);
-			return this.store.create({ header, inheritedEventCount: SessionLogOffset(inheritedEventCount ?? 0), prefix });
+			const backing = this.store.create({ header, inheritedEventCount: SessionLogOffset(inheritedEventCount ?? 0), prefix });
+			return this.trackWriteHandle(backing);
 		}
-		return this.inner.create(header, options);
+		const backing = await this.inner.create(header, options);
+		return this.trackWriteHandle(backing);
+	}
+
+	/** Wrap a fresh write backing in a facade handle and register it as live. */
+	private trackWriteHandle(backing: SessionHandle): FacadeWriteHandle {
+		const facadeHandle = new FacadeWriteHandle(backing.id, backing.header, backing.inheritedEventCount, backing, (handle) => {
+			if (this.activeWrites.get(handle.id) === handle) this.activeWrites.delete(handle.id);
+		});
+		// The most recently issued live write handle is the conversion target.
+		this.activeWrites.delete(backing.id);
+		this.activeWrites.set(backing.id, facadeHandle);
+		return facadeHandle;
 	}
 
 	async open(id: SessionId, access: SessionAccess, options?: SessionPersistenceOpenOptions): Promise<SessionHandle> {
-		if (this.store.owns(id)) return this.store.open(id, access);
+		if (this.store.owns(id)) {
+			const backing = this.store.open(id, access);
+			return access === 'write' ? this.trackWriteHandle(backing) : backing;
+		}
 		if (this.inner === null) throw new SessionPersistenceNotFoundError(id);
-		return this.inner.open(id, access, options);
+		const backing = await this.inner.open(id, access, options);
+		return access === 'write' ? this.trackWriteHandle(backing) : backing;
 	}
 
+	/**
+	 * Toggle persist ↔ incognito. Turning ON additionally converts the most
+	 * recent live write session to incognito mid-session: the SAME session
+	 * continues, its on-disk log is wiped, and nothing further in this session
+	 * ever touches disk. Events already written before the toggle survive in
+	 * memory (read-your-writes). Turning OFF affects only sessions created
+	 * afterwards; the live session keeps its current backing.
+	 */
+	async toggle(): Promise<{ mode: IncognitoMode; outcome: 'converted' | 'in-memory' | 'none' }> {
+		const mode = this.modeStore.toggle();
+		if (!this.modeStore.isIncognito()) return { mode, outcome: 'none' };
+		const facadeHandle = [...this.activeWrites.values()].at(-1);
+		if (facadeHandle === undefined) return { mode, outcome: 'none' };
+		// A store-owned id means the backing is already the in-memory buffer.
+		if (this.store.owns(facadeHandle.id)) return { mode, outcome: 'in-memory' };
+		if (this.inner === null) return { mode, outcome: 'in-memory' };
+		await this.convertDurableToIncognito(facadeHandle, facadeHandle.currentBacking());
+		return { mode, outcome: 'converted' };
+	}
+
+	/**
+	 * Read-then-close-then-wipe-then-buffer. Ordering is deliberate: the full
+	 * log is read from the durable handle first (pre-toggle events survive in
+	 * memory), then close drains any in-flight durability work and releases
+	 * single-writer ownership, and only then is the on-disk artifact removed.
+	 * A delete failure propagates loudly — the wipe is never pretended.
+	 */
+	private async convertDurableToIncognito(facadeHandle: FacadeWriteHandle, durable: SessionHandle): Promise<void> {
+		const id = facadeHandle.id;
+		const stored = await durable.read();
+		await durable.close();
+		const path = await this.inner!.resolveCurrentLog(id);
+		if (path !== undefined) this.wipeUnderRoot(path);
+		const buffer = this.store.create({
+			header: facadeHandle.header,
+			inheritedEventCount: facadeHandle.inheritedEventCount,
+			prefix: stored.events,
+		});
+		facadeHandle.swapBacking(buffer);
+	}
+
+	/** Remove the session's on-disk directory, refusing paths outside the configured root. */
+	private wipeUnderRoot(path: string): void {
+		const root = resolve(this.config.root);
+		const sessionDir = dirname(resolve(path));
+		if (sessionDir === root || !sessionDir.startsWith(root + '/')) {
+			throw new Error(`dsh-incognito: refusing to wipe "${sessionDir}" outside the configured root "${root}"`);
+		}
+		rmSync(sessionDir, { recursive: true, force: false });
+	}
+
+	/** Flush every live write handle. */
 	async flush(): Promise<void> {
 		const errors: unknown[] = [];
 		try {

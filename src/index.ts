@@ -8,6 +8,7 @@ import type { IncognitoPluginConfig } from './types.ts';
 export { parseIncognitoEnv, ModeStore } from './mode.ts';
 export { IncognitoSessionStore } from './incognito-store.ts';
 export { IncognitoSessionHandle } from './incognito-handle.ts';
+export { FacadeWriteHandle } from './facade-handle.ts';
 export { IncognitoSessionPersistence } from './service.ts';
 export type { IncognitoMode, IncognitoPluginConfig } from './types.ts';
 
@@ -32,7 +33,7 @@ function apply(ctx: Context, config: IncognitoPluginConfig): void {
 		warn: (message: string) => ctx.logger?.warn?.(message),
 	};
 	const facade = createFacade(ctx, { root, ...(compression !== undefined ? { compression } : {}) }, modeStore, logger);
-	applyIncognitoCommand(ctx, modeStore);
+	applyIncognitoCommand(ctx, modeStore, facade);
 	void facade;
 }
 
