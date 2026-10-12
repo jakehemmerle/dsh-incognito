@@ -9,11 +9,7 @@
     "test": "vitest run",
     "verify": "node harness/verify.mjs"
   },
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "esbuild"
-    ]
-  },
+  "packageManager": "pnpm@12.11.2",
   "peerDependencies": {
     "@deepseek-ai/cordis": "^4.0.4",
     "@deepseek-ai/dsh-commands": "0.2.0-rc.2",
