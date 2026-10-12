@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "embedded",
+  "dolt_database": "dsh_incognito",
+  "project_id": "ebb8cca1-5998-475a-946c-230f6e1e9feb"
+}
