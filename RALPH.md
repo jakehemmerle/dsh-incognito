@@ -107,7 +107,17 @@ Closed:
 - `dsh-incognito-8h5` (b3e1718): build.mjs now stats the written bundle (21.6 KiB); real-client suites skip ONLY when the offline nix check sets SKIP_REAL_CLIENT=1 (host runs always execute them — the round-2 gate default was inverted).
 
 Open beads: only the epic `b1r` (rounds continue) — everything else closed. Next tag (0.1.0-alpha.2 or 0.1.1-alpha.1) should include the dql fix; v0.1.0-alpha.1 remains the pinned release until the lead re-tags.
-## Environment facts (verified this round)
+
+### v0.1.0-alpha.2 release cut (lead-directed, 2026-10-12)
+
+Released **v0.1.0-alpha.2** with the dql durability fix BEFORE fleet rollout
+(lead-accepted recommendation): full gate green (31/31 host suites incl.
+real-client arms, verify arms VERIFY PASS, `nix flake check` all checks
+passed, `nix run .#e2e` VERIFY PASS), CHANGELOG entry, tag pushed
+(25a3ceb). nix-config re-pinned to the new tag (31d1097): profile tests green
+with the -0.1.0-alpha.2 name assertion, import smoke ok in nix-config's own
+build of the pinned tag. **Rollout now with the lead.**
+
 
 - Host dsh: **0.2.1-alpha.2** (`/nix/store/i24c2k38bz3h86r0v7bjr4amk7d4vxrj-dsh-0.2.1-alpha.2`,
   launcher `~/.local/share/nix-management/bin/dsh`); dst reports the same. Fleet dsh-TUI: **0.14.0**.
@@ -131,3 +141,4 @@ Open beads: only the epic `b1r` (rounds continue) — everything else closed. Ne
   followed by a separate fix commit.
 - Bugs found: red commit (`5.3 FLASH: red: <id> ...`) then fix (`5.3 FLASH: fix: ...`).
 - Mock model only. No real credentials in automated runs.
+## Environment facts (verified this round)
