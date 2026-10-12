@@ -11,9 +11,10 @@
 // (P-06 web) with a fast-check burst sweep (NUM_RUNS, default 8).
 import { describe, expect, it } from 'vitest';
 
-// The offline Nix suite check has no browser/tmux: real-client suites run on
-// the host (pnpm test with RUN_REAL_CLIENT=1) and via the whole-binary e2e app.
-const describeReal = process.env.RUN_REAL_CLIENT ? describe : describe.skip;
+// The OFFLINE Nix suite check has no browser/tmux: it sets SKIP_REAL_CLIENT=1
+// and these suites report as skipped there; on the host they always run, and
+// the whole-binary e2e app covers the store-built bundle separately.
+const describeReal = process.env.SKIP_REAL_CLIENT ? describe.skip : describe;
 import fc from 'fast-check';
 import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';

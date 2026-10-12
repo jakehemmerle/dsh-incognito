@@ -102,6 +102,9 @@
             nativeBuildInputs = [ pkgs.nodejs pkgs.pnpm pkgs.pnpmConfigHook ];
             pnpmDeps = pnpmDeps;
             DSH_BIN = "${dshStore}/bin/dsh";
+            # The sandbox has no browser or tmux: the real-client suites report
+            # as skipped here and run on the host / via the e2e app instead.
+            SKIP_REAL_CLIENT = "1";
             # pnpmConfigHook (postConfigure) installs node_modules offline with
             # --ignore-scripts, wires pnpm 11 flags (trust_lockfile, pm_on_fail)
             # and copies the fetched store to a writable dir.

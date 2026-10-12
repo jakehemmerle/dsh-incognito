@@ -1,4 +1,5 @@
 import * as esbuild from 'esbuild';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = fileURLToPath(new URL('.', import.meta.url));
@@ -18,6 +19,9 @@ const result = await esbuild.build({
 });
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const bytes = Buffer.byteLength(result.outputFiles?.[0]?.text ?? '');
+  // esbuild writes the bundle to disk (write defaults to true), so
+  // outputFiles is empty — measure the written artifact instead.
+  const { statSync } = await import('node:fs');
+  const bytes = statSync(join(root, 'lib/index.js')).size;
   console.log(`lib/index.js  ${(bytes / 1024).toFixed(1)} KiB`);
 }
