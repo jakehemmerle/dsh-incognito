@@ -10,6 +10,10 @@
 // command, so there is no web N/A), boot incognito via DSH_INCOGNITO=1
 // (P-06 web) with a fast-check burst sweep (NUM_RUNS, default 8).
 import { describe, expect, it } from 'vitest';
+
+// The offline Nix suite check has no browser/tmux: real-client suites run on
+// the host (pnpm test with RUN_REAL_CLIENT=1) and via the whole-binary e2e app.
+const describeReal = process.env.RUN_REAL_CLIENT ? describe : describe.skip;
 import fc from 'fast-check';
 import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -108,7 +112,7 @@ function expectCleanConsole(consoleErrors) {
 	expect(noise.length).toBe(consoleErrors.length);
 }
 
-describe('dsh-incognito on real dsh web (headless Chromium)', () => {
+describeReal('dsh-incognito on real dsh web (headless Chromium)', () => {
 	it('P-01 web persist arm: a chatted session materializes server-side', { timeout: 180000 }, async () => {
 		const { mock, profile, web, browser, page, composer, consoleErrors } = await makeWeb();
 		try {

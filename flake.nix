@@ -90,7 +90,7 @@
             inherit (plugin) pname version;
             src = pkgs.lib.cleanSource ./.;
             fetcherVersion = 2;
-            hash = "sha512-/9qyrvqxFLrV8eXtZJpv89mK2cXXS3XTZ725L6zoz2xQ7at7oW2vKjIphjc6apVOtVQlu7ktaQssrKkScev7Rg==";
+            hash = "sha512-Jx3TmiCHlZf8b6RYgVK7isOMaR47i3BwvqsjU0Gb95O2Ot4BDWzgC9rjYrByPxNdzWjnepwhcb3QJ4sSYztGQQ==";
           };
         in {
           # Fast suites (vitest + tsc) against the exact pinned dsh: the

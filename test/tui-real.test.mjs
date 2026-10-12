@@ -9,6 +9,10 @@
 // sweep generates chat-burst lengths with a fresh TUI per case (NUM_RUNS,
 // default 8; the release campaign raises it — TESTING.md records it).
 import { describe, expect, it } from 'vitest';
+
+// The offline Nix suite check has no browser/tmux: real-client suites run on
+// the host (pnpm test with RUN_REAL_CLIENT=1) and via the whole-binary e2e app.
+const describeReal = process.env.RUN_REAL_CLIENT ? describe : describe.skip;
 import fc from 'fast-check';
 import { existsSync, readdirSync, writeFileSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -69,7 +73,7 @@ async function chatTurn(tui, mock, turnsBefore) {
 	await tui.waitFor(REPLY, { timeout: 30000 });
 }
 
-describe('dsh-incognito on a real dsh-TUI (private tmux socket)', () => {
+describeReal('dsh-incognito on a real dsh-TUI (private tmux socket)', () => {
 	it('P-01 persist arm: a chatted session materializes under $DSH_HOME/sessions', { timeout: 120000 }, async () => {
 		const { mock, profile, tui } = await makeTui();
 		try {
