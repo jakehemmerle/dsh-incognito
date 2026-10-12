@@ -154,7 +154,18 @@ export class IncognitoSessionPersistence extends SessionPersistence {
 		const stored = await durable.read();
 		await durable.close();
 		const path = await this.inner!.resolveCurrentLog(id);
-		if (path !== undefined) this.wipeUnderRoot(path);
+		try {
+			if (path !== undefined) this.wipeUnderRoot(path);
+		} catch (error) {
+			// dql: a failed wipe must never pretend success. The durable handle
+			// was already closed, so reopen it for write and restore it as the
+			// backing — the session stays durable, owned, and appendable — then
+			// rethrow. (The mode stays incognito; mode rollback is a separate
+			// product decision noted in SPEC P-04.)
+			const reopened = await this.inner!.open(id, 'write');
+			facadeHandle.swapBacking(reopened);
+			throw error;
+		}
 		const buffer = this.store.create({
 			header: facadeHandle.header,
 			inheritedEventCount: facadeHandle.inheritedEventCount,
