@@ -98,6 +98,15 @@ Closed:
 **The lead can now wire nix-config to tag `v0.1.0-alpha.1`** (bead 68o awaits ROUND B authorization).
 
 Open after ROUND A: `dsh-incognito-dql` (red: wipe-failure window), `dsh-incognito-8h5` (chore: build print), `dsh-incognito-68o` (nix-config wiring, blocked on lead authorization), epic `b1r`.
+
+### ROUND B — outcome (2026-10-12)
+
+Closed:
+- `dsh-incognito-68o` **nix-config wiring** (nix-config commit f417198, pushed to main, preflight OK, NO conflicts with Jake's concurrent commits — stacked cleanly on 5c7228f): `pkgs/dsh-incognito.nix` (flake input pinned to tag `v0.1.0-alpha.1`; esbuild bundle; node_modules peer symlink farm into dshBase so the bundle resolves the host's own modules; postInstall import smoke proves peer resolution), `home/dsh.nix` (base `session-persistence-jsonl` disabled + facade inserted with the host-computed `root = <home>/.dsh/sessions` in BOTH web and TUI patches — JSON rows, since yaml.generate cannot emit !!js), `tests/test_dsh_profiles.py` (check_incognito asserts the disable row and exactly one facade insert with the tagged name and sessions root on every profile-having host; whole file green: jake/work/gpu/fw13 + dev-main/generic-dev, kali* have no profiles). **dev-main note**: it imports dsh.nix via omp-proxy.nix, so "absence elsewhere" = profile-less hosts only; incognito is unconditional like usage-limits (Jake's installed-everywhere requirement). The lead handles rollout; per-host verification pending.
+- `dsh-incognito-dql` **red→fix** (a9b6b79 → 807e87f): wipe failure mid-conversion — red test chmods the session's parent dir so rmSync fails; fix catches the failure, REOPENS the durable handle for write and swaps it back as the backing before rethrowing, so a failed wipe leaves the session durable, owned, and appendable (mode stays incognito — session-scoped invariant per SPEC P-04; mode rollback noted as a separate product decision).
+- `dsh-incognito-8h5` (b3e1718): build.mjs now stats the written bundle (21.6 KiB); real-client suites skip ONLY when the offline nix check sets SKIP_REAL_CLIENT=1 (host runs always execute them — the round-2 gate default was inverted).
+
+Open beads: only the epic `b1r` (rounds continue) — everything else closed. Next tag (0.1.0-alpha.2 or 0.1.1-alpha.1) should include the dql fix; v0.1.0-alpha.1 remains the pinned release until the lead re-tags.
 ## Environment facts (verified this round)
 
 - Host dsh: **0.2.1-alpha.2** (`/nix/store/i24c2k38bz3h86r0v7bjr4amk7d4vxrj-dsh-0.2.1-alpha.2`,
