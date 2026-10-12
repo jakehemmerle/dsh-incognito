@@ -26,7 +26,8 @@ import { join } from 'node:path';
 import { startMockLlm } from '../test/rig/mock-llm.mjs';
 
 const REPO = new URL('..', import.meta.url).pathname;
-const PLUGIN_LIB = join(REPO, 'lib/index.js');
+// PLUGIN_LIB override lets the Nix e2e app point the harness at the store-built bundle.
+const PLUGIN_LIB = process.env.PLUGIN_LIB ?? join(REPO, 'lib/index.js');
 
 const RUNS_PER_ARM = Number(process.env.VERIFY_RUNS ?? 3);
 const TIMEOUT_MS = 120_000;
