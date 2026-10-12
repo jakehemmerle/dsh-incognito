@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.1.0-alpha.2 (2026-10-12)
+
+Durability fix release, cut before fleet rollout so hosts get the conversion
+rollback from day one.
+
+- **Fixed:** a failed wipe during mid-session conversion no longer leaves the
+  session bricked — the facade reopens the durable handle and restores it as
+  the backing before rethrowing, so a failed wipe leaves the session durable,
+  owned, and appendable (bead dsh-incognito-dql; red a9b6b79, fix 807e87f).
+- **Chore:** build.mjs measures the written bundle; real-client suites skip
+  only when the offline Nix check sets SKIP_REAL_CLIENT=1.
+- **Tested against:** unchanged — DSH 0.2.1-alpha.2, dsh-TUI 0.14.0, peers
+  exactly `0.2.1-alpha.2` / cordis `4.0.5-alpha.1`. Evidence: 31/31 host
+  suites incl. real-client arms, verify arms VERIFY PASS, `nix flake check`
+  green, `nix run .#e2e` VERIFY PASS (this tag), profile tests in nix-config
+  green. Full matrix: TESTING.md.
 ## 0.1.0-alpha.1 (2026-10-12)
 
 First tagged release. Incognito mode for DSH session persistence: sessions
