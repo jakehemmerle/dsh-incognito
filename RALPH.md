@@ -86,6 +86,18 @@ Next round (round 3 = release round), in priority order — trust `bd ready`:
 2. `dsh-incognito-bac` Playwright web real-client property tests (server-side persistence arms).
 3. `dsh-incognito-pcs` TESTING.md traceability; `dsh-incognito-18t` RELEASING.md + CHANGELOG.md + tag v0.1.0-alpha.1 if the full suite is green (round-3 release budgets: ≥100/surface across ≥3 seeds where applicable).
 4. Backlog: dql (wipe-failure red), 8h5 (build print), 68o nix-config wiring (lead deploys after tag).
+
+### ROUND A (post-restart) — outcome (2026-10-12)
+
+Closed:
+- `dsh-incognito-vzv` (2e24f71 prior export; tests committed with vitest include fix): **real dsh-TUI property tests** — 4 arms on a private tmux socket: P-01 persist baseline (files on chat); P-02/03/04 mid-session `/incognito` through the REAL command dispatch (current session wiped, zero writes after, turn continues in memory); P-05 toggle-off → `/new` → next session persists; P-06 `DSH_INCOGNITO=1` fc burst sweep. The P-06 sweep **caught a rig bug**: the vendored rig's tmux env allowlist dropped DSH_INCOGNITO (fixed as a documented vendored-copy delta). Commit 2e24f71-adjacent (vzv suite + vitest include + rig delta).
+- `dsh-incognito-bac` (7784527): **real dsh-web property tests** — Playwright (nix google-chrome via executablePath) through the REAL web UI: dismiss preview notice → choose workspace → chat in the composer. Arms: P-01 server-side files; P-02/03/04 `/incognito` dispatched from the composer **wipes the current session server-side** (the command IS dispatchable in web — no web N/A, SPEC updated understanding); P-06 boot-incognito fc sweep. Preview-notice dismissal race found by a full-suite repeat run, fixed, repeat ×3 green.
+- `dsh-incognito-pcs` (bdfe025): **TESTING.md** — P-01..P-13 traceability (oracle/test/surfaces/results), budgets, seed policy, flake/mutation findings, open items.
+- `dsh-incognito-18t` (bdfe025, tag `v0.1.0-alpha.1`): **RELEASING.md** (SemVer gate, no bypass), **CHANGELOG.md**, version → **0.1.0-alpha.1** (DSH alpha channel). Release gate green: 30/30 host suites; NUM_RUNS=25 release sweeps on BOTH surfaces; verify VERIFY PASS; `nix flake check` all checks passed; `nix run .#e2e` VERIFY PASS with the store-built bundle. Real-client suites gated behind `RUN_REAL_CLIENT=1` for the OFFLINE nix suite check (no browser/tmux in the sandbox; documented in TESTING.md — they run on host and via the e2e app).
+
+**The lead can now wire nix-config to tag `v0.1.0-alpha.1`** (bead 68o awaits ROUND B authorization).
+
+Open after ROUND A: `dsh-incognito-dql` (red: wipe-failure window), `dsh-incognito-8h5` (chore: build print), `dsh-incognito-68o` (nix-config wiring, blocked on lead authorization), epic `b1r`.
 ## Environment facts (verified this round)
 
 - Host dsh: **0.2.1-alpha.2** (`/nix/store/i24c2k38bz3h86r0v7bjr4amk7d4vxrj-dsh-0.2.1-alpha.2`,
