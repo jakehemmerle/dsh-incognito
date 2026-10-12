@@ -1,5 +1,6 @@
 import '@deepseek-ai/dsh-commands';
 import { CommandDefinitionId } from '@deepseek-ai/dsh-commands/brand';
+import type { CommandInvocation } from '@deepseek-ai/dsh-commands';
 import type { Context } from '@deepseek-ai/cordis';
 import type { ModeStore } from './mode.ts';
 import type { IncognitoSessionPersistence } from './service.ts';
@@ -17,8 +18,10 @@ export function applyIncognitoCommand(ctx: Context, modeStore: ModeStore, facade
 			definitionId: CommandDefinitionId('dsh-incognito'),
 			name: 'incognito',
 			description: 'Toggle incognito persistence (wipes the current session from disk)',
-			handler: async () => {
-				const { mode, outcome } = await facade.toggle();
+			handler: async (invocation: CommandInvocation) => {
+				// Convert exactly the session whose UI ran the command (`Agent.session.id`) — never the
+				// facade's "most recent handle" guess (§5 audit: wrong session wiped).
+				const { mode, outcome } = await facade.toggle(invocation.agent.session.id);
 				if (mode === 'persist') {
 					return {
 						kind: 'success' as const,

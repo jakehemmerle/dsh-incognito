@@ -108,18 +108,33 @@ export class IncognitoSessionPersistence extends SessionPersistence {
 	}
 
 	/**
-	 * Toggle persist ↔ incognito. Turning ON additionally converts the most
-	 * recent live write session to incognito mid-session: the SAME session
+	 * Toggle persist ↔ incognito. Turning ON additionally converts the
+	 * requested live write session to incognito mid-session: the SAME session
 	 * continues, its on-disk log is wiped, and nothing further in this session
 	 * ever touches disk. Events already written before the toggle survive in
 	 * memory (read-your-writes). Turning OFF affects only sessions created
 	 * afterwards; the live session keeps its current backing.
+	 *
+	 * `requestedId` names the CURRENT session as known by the caller (the
+	 * `/incognito` command passes `invocation.agent.sessionId`). The facade
+	 * never guesses: converting "the most recently issued handle" would wipe
+	 * the wrong session whenever another live write session exists (subagents,
+	 * forks, a reopened session). Without a requested id the legacy most
+	 * recent live write handle is targeted.
 	 */
-	async toggle(): Promise<{ mode: IncognitoMode; outcome: 'converted' | 'in-memory' | 'none' }> {
+	async toggle(requestedId?: SessionId): Promise<{ mode: IncognitoMode; outcome: 'converted' | 'in-memory' | 'none' }> {
 		const mode = this.modeStore.toggle();
 		if (!this.modeStore.isIncognito()) return { mode, outcome: 'none' };
-		const facadeHandle = [...this.activeWrites.values()].at(-1);
-		if (facadeHandle === undefined) return { mode, outcome: 'none' };
+		let facadeHandle: FacadeWriteHandle | undefined;
+		if (requestedId !== undefined) {
+			facadeHandle = this.activeWrites.get(requestedId);
+			if (facadeHandle === undefined) {
+				return { mode, outcome: this.store.owns(requestedId) ? 'in-memory' : 'none' };
+			}
+		} else {
+			facadeHandle = [...this.activeWrites.values()].at(-1);
+			if (facadeHandle === undefined) return { mode, outcome: 'none' };
+		}
 		// A store-owned id means the backing is already the in-memory buffer.
 		if (this.store.owns(facadeHandle.id)) return { mode, outcome: 'in-memory' };
 		if (this.inner === null) return { mode, outcome: 'in-memory' };

@@ -108,13 +108,15 @@ describe('toggle targets the requested session (real facade, real JSONL backend)
 		const { facade, root } = makeFacade();
 		const { a, b, aId, bId, bFiles } = await twoDurableSessions(facade, root);
 
-		let captured: { handler: (invocation: { agent: { sessionId: SessionId } }) => Promise<unknown> } | undefined;
+		let captured: { handler: (invocation: { agent: { session: { id: SessionId } } }) => Promise<unknown> } | undefined;
 		const fakeCtx = {
-			effect(gen: Generator, _name: string) {
-				gen.next();
+			// cordis ctx.effect takes a generator FUNCTION; stepping it once runs
+			// the body up to its first yield, which performs commands.register.
+			effect(makeGen: () => Generator, _name: string) {
+				makeGen().next();
 			},
 			commands: {
-				register(definition: { handler: (invocation: { agent: { sessionId: SessionId } }) => Promise<unknown> }) {
+				register(definition: { handler: (invocation: { agent: { session: { id: SessionId } } }) => Promise<unknown> }) {
 					captured = definition;
 				},
 			},
@@ -123,7 +125,7 @@ describe('toggle targets the requested session (real facade, real JSONL backend)
 		expect(captured).toBeDefined();
 
 		// The dispatching UI invokes the handler with the CURRENT session A.
-		const result = await captured!.handler({ agent: { sessionId: aId } }) as { kind: string; text: string };
+		const result = await captured!.handler({ agent: { session: { id: aId } } }) as { kind: string; text: string };
 		expect(result.kind).toBe('success');
 		expect(result.text).toContain('wiped');
 
