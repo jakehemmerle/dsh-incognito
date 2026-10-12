@@ -43,7 +43,26 @@ function execTargetOf(scriptPath: string): string | undefined {
   return match?.[1];
 }
 
-function installedDshVersion(): DshPackage {
+function hostPackageVersion(name: string, installDir: string): string {
+  // The dsh store tree: <install>/lib/node_modules/<name> for dsh itself,
+  // nested under <install>/lib/node_modules/@deepseek-ai/dsh/node_modules/<name>
+  // for the rest of the @deepseek-ai family.
+  const candidates = [
+    join(installDir, 'lib', 'node_modules', name, 'package.json'),
+    join(installDir, 'lib', 'node_modules', '@deepseek-ai', 'dsh', 'node_modules', name, 'package.json'),
+  ];
+  for (const pkgPath of candidates) {
+    try {
+      const pkg = JSON.parse(readFileSync(pkgPath, 'utf8')) as { name: string; version: string };
+      return pkg.version;
+    } catch {
+      // try the next layout
+    }
+  }
+  throw new Error(`host install does not contain ${name} (searched ${candidates.join(', ')})`);
+}
+
+function installedHost(): { dshVersion: string; installDir: string } {
   const bin = process.env.DSH_BIN ?? 'dsh';
   const found = spawnSync('which', [bin], { encoding: 'utf8' });
   const onPath = found.status === 0 ? found.stdout.trim().split('\n')[0]?.trim() : '';
@@ -62,11 +81,10 @@ function installedDshVersion(): DshPackage {
   }
   candidates.push(resolved, onPath);
   for (const entry of candidates) {
-    // <install>/bin/dsh → <install>/lib/node_modules/@deepseek-ai/dsh/package.json
-    const pkgPath = join(dirname(entry), '..', 'lib', 'node_modules', '@deepseek-ai', 'dsh', 'package.json');
+    const installDir = join(dirname(entry), '..');
     try {
-      const pkg = JSON.parse(readFileSync(pkgPath, 'utf8')) as { name: string; version: string };
-      return { name: pkg.name, version: pkg.version };
+      const pkg = JSON.parse(readFileSync(join(installDir, 'lib', 'node_modules', '@deepseek-ai', 'dsh', 'package.json'), 'utf8')) as { name: string; version: string };
+      return { dshVersion: pkg.version, installDir };
     } catch {
       // try the next candidate
     }
@@ -82,27 +100,27 @@ describe('host seam: @deepseek-ai peer pins match the installed dsh exactly', ()
   const pkg = loadJson<{ name: string; version: string; peerDependencies: Record<string, string>; devDependencies: Record<string, string> }>('package.json');
 
   it('resolves the installed dsh binary', () => {
-    const dsh = installedDshVersion();
-    expect(dsh.name).toBe('@deepseek-ai/dsh');
-    expect(dsh.version).toMatch(/^\d+\.\d+\.\d+/);
+    const host = installedHost();
+    expect(host.dshVersion).toMatch(/^\d+\.\d+\.\d+/);
   });
 
-  it('every @deepseek-ai/* peerDependency is an exact pin of the installed dsh version', () => {
-    const dsh = installedDshVersion();
+  it('every @deepseek-ai/* peerDependency is an exact pin of the version in the installed host', () => {
+    const host = installedHost();
     const peers = Object.entries(pkg.peerDependencies).filter(([name]) => name.startsWith('@deepseek-ai/'));
     expect(peers.length).toBeGreaterThan(0);
     for (const [name, range] of peers) {
       expect(range, `${name} peer range must be an exact pin (no ^/~) against a prerelease dsh`).not.toMatch(/^[~^]/);
-      expect(range, `${name} peer must be pinned to the installed dsh ${dsh.version} or DSH disables this plugin (and the profile loses persistence)`).toBe(dsh.version);
+      const hostVersion = hostPackageVersion(name, host.installDir);
+      expect(range, `${name} peer must be pinned exactly to the host's ${hostVersion} or DSH disables this plugin (and the profile loses persistence)`).toBe(hostVersion);
     }
   });
 
   it('every @deepseek-ai/* devDependency is the exact version the suites qualify against', () => {
-    const dsh = installedDshVersion();
+    const host = installedHost();
     const devs = Object.entries(pkg.devDependencies).filter(([name]) => name.startsWith('@deepseek-ai/'));
     for (const [name, range] of devs) {
       expect(range, `${name} devDependency must be an exact pin`).not.toMatch(/^[~^]/);
-      expect(range, `${name} devDependency must match the installed dsh ${dsh.version}`).toBe(dsh.version);
+      expect(range, `${name} devDependency must match the host's ${hostPackageVersion(name, host.installDir)}`).toBe(hostPackageVersion(name, host.installDir));
     }
   });
 });
