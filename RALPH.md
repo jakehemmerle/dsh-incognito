@@ -68,6 +68,24 @@ Next round (round 2), in priority order — trust `bd ready`:
 1. `dsh-incognito-kr8` SPEC.md (P-ids, oracles, surfaces; web N/A rationale for a /command: web sessions persist server-side — web tests assert server-side files, not a web UI control).
 2. `dsh-incognito-jbm` vendor mock-llm rig into test/rig/ and rework harness/verify.mjs off live creds (never run the r0 verify.mjs as-is: it copies ~/.dsh/.credentials.yaml and calls the real ProviderProxy).
 3. Then TUI (vzv) / web (bac) real-client property tests, flake.nix (qmw).
+
+### Round 2 — outcome (2026-10-12)
+
+Closed beads (lead's ordered list, all three):
+- `dsh-incognito-kr8` **SPEC.md**: P-01..P-13 with independent oracles (FS/MEM/WIRE/HOST/CFG), per-surface columns (headless/TUI/web) incl. N/A rationales, the non-negotiable persistence invariants (persist writes files P-01; incognito writes none P-02; the invocation session is the one converted P-03; conversion transactional P-04), privacy-scope statement (disk persistence only — not network/memory privacy; resume-after-restart impossible by design), state ownership, and the dql gap noted as the target invariant "a failed wipe leaves the session durable and usable".
+- `dsh-incognito-jbm` **vendored rig**: `test/rig/mock-llm.mjs` (verbatim from skill @ nix-config 6a7e613, provenance header). `harness/verify.mjs` + `harness/smoke.mjs` reworked onto the local mock (api: openai-completions, MOCK_API_KEY dummy env). Grep acceptance CLEAN (no user-credential-store refs, no real provider anywhere in harness/). smoke asserts row activity via --dump-config (plugin row mounted + base row disabled) and its negative control (SMOKE_NEGATIVE_CONTROL=1) trips when the plugin is unmounted. verify: VERIFY PASS (3 venvs/arm × baseline/persist/incognito + 3 flip sweeps, every run reaches the mock). Commit 19fb4a9.
+- `dsh-incognito-qmw` **flake.nix** (commit 9aaf90a): packages.default (esbuild CLI bundle, version from package.json, peer-resolution symlink farm from the pinned dsh tree), devShells.default (node, pnpm, tmux, esbuild, beads 1.3.0, pinned dsh on PATH + dst shim), checks.suite (FULL vitest+tsc offline via fetchPnpmDeps + pnpmConfigHook, DSH_BIN pointed at the pinned store dsh), apps.e2e (verify harness with the store-built bundle via PLUGIN_LIB override). `nix flake check` green; `nix run .#e2e` VERIFY PASS.
+
+Debug findings recorded for future rounds (all resolved inside 9aaf90a):
+1. nixpkgs pnpm is 11.x: no --allow-build (pnpm-workspace.yaml onlyBuiltDependencies works there), --trust-lockfile needed offline (the hook sets it), and the repo's packageManager pnpm@12 pin must not be visible to pnpm 11 (manage-package-manager-versions self-fetch) — pnpmConfigHook flow handles all of it.
+2. fetchPnpmDeps output is a READ-ONLY store; pnpm needs a writable copy — pnpmConfigHook does this; never hand-wire --store-dir.
+3. The store-built bundle needs peer modules RESOLVABLE from its own tree: packages.default ships node_modules/@deepseek-ai/* symlinks into the pinned dsh input copy (in-closure; noBrokenSymlinks rejects literal store-path symlinks). The RUNNING binary for devShell/checks/e2e is the literal fleet path i24c2k38… (input copies would fork module identity); P-11's contract test gates pin drift.
+
+Next round (round 3 = release round), in priority order — trust `bd ready`:
+1. `dsh-incognito-vzv` TUI real-client property tests (private tmux socket, /incognito mid-session arms).
+2. `dsh-incognito-bac` Playwright web real-client property tests (server-side persistence arms).
+3. `dsh-incognito-pcs` TESTING.md traceability; `dsh-incognito-18t` RELEASING.md + CHANGELOG.md + tag v0.1.0-alpha.1 if the full suite is green (round-3 release budgets: ≥100/surface across ≥3 seeds where applicable).
+4. Backlog: dql (wipe-failure red), 8h5 (build print), 68o nix-config wiring (lead deploys after tag).
 ## Environment facts (verified this round)
 
 - Host dsh: **0.2.1-alpha.2** (`/nix/store/i24c2k38bz3h86r0v7bjr4amk7d4vxrj-dsh-0.2.1-alpha.2`,
