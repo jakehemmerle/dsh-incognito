@@ -18,8 +18,15 @@ skill's references/release.md; re-verify its dated facts at each release).
 1. `git pull --ff-only` on a clean main; close or defer release-blocking beads.
 2. `corepack pnpm typecheck && corepack pnpm test` (fast + facade + real-client
    suites) and `node harness/verify.mjs` — all green on the pinned host.
-3. Release-campaign budgets: real-client sweeps at `NUM_RUNS=25` per surface
-   (`test/tui-real.test.mjs -t P-06`, `test/web.real.test.mjs -t P-06`).
+3. Release-campaign budgets (ROUND C audit, 2026-10-12): **≥100 real-client
+   generated cases per surface spread across ≥3 logged seeds, one fresh
+   client/mock/profile per case, replayable via `FC_SEED` (+`FC_PATH`)** —
+   e.g. `NUM_RUNS=34 FC_SEED=20261012 corepack pnpm vitest run
+   test/tui-real.test.mjs -t P-06` (and the same for web) — plus the fast
+   suites at `NUM_RUNS=1000` (`test/property.test.ts`,
+   `test/toggle-lifecycle.test.ts`). The alpha.1/alpha.2 gates ran this at
+   NUM_RUNS=25 across a single shared client, which was under budget and
+   recorded only one seed.
 4. `nix flake check` (offline suite check against the pinned dsh) and
    `nix run .#e2e` (whole-binary harness with the store-built bundle).
 5. Record results (versions, seeds, counts) in CHANGELOG.md and TESTING.md.

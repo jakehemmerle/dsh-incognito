@@ -142,3 +142,74 @@ build of the pinned tag. **Rollout now with the lead.**
 - Bugs found: red commit (`5.3 FLASH: red: <id> ...`) then fix (`5.3 FLASH: fix: ...`).
 - Mock model only. No real credentials in automated runs.
 ## Environment facts (verified this round)
+### ROUND C — closure audit (2026-10-12, post-release)
+
+Jake's instruction: all work beads were closed and v0.1.0-alpha.2 was deployed
+fleet-wide; the job was the CLOSURE AUDIT ONLY (Step 0) — re-verify every
+closure against its recorded evidence, check the TESTING.md honest-gaps and
+the SPEC P-04 mode-rollback product decision, reopen+fix anything incomplete,
+then report. No re-release.
+
+Method: walked all 14 closed beads (bd show + recorded SHAs/claims). Verified
+the commit SHAs (b73fb61, 77938d5, e7d4166, 19fb4a9, 9aaf90a, 2e24f71,
+7784527, bdfe025, a9b6b79, 807e87f, b3e1718, 25a3ceb — all exist; nix-config
+f417198 and 31d1097 exist and 31d1097's flake.lock pins v0.1.0-alpha.2 =
+rev 25a3ceb), re-ran the full 35/35 host suite (~104 s real-client arms
+executed on host, not skipped), verify VERIFY PASS + smoke PASS + negative
+control TRIPPED today, and compared every recorded claim against the tests
+and docs.
+
+**Five closures reopened (reasons) and fixed:**
+
+1. dsh-incognito-kr8 — SPEC P-04/§3 still presented the dql wipe-failure bug
+   as a live gap after it was fixed/tagged/released, and the
+   mode-stays-incognito product decision was nowhere in the SPEC (only a
+   code comment). Fixed in commit 30eb116: P-04 now records
+   red a9b6b79 → fix 807e87f, the restored-durable-backing guarantee, and the
+   explicit no-mode-rollback product decision with its rationale.
+2. dsh-incognito-pcs — TESTING.md 'Known open items' still listed dql as
+   '(red pending)' and 8h5 as open (both done), and its P-07 row claimed a
+   client restart leg 'covered by toggle-lifecycle fixtures' that contains
+   no restart test. TESTING.md rewritten with real evidence + the audit
+   section.
+3. dsh-incognito-vzv — the P-07 restart leg from the bead's own description
+   had never been built (no test restarts a real client), and P-06's sweep
+   generated its cases on ONE shared client despite evidence claiming
+   'fresh TUI per case'. Fixed: new facade-level restart.test.ts covering
+   P-07's registered MEM+FS oracle both ways, plus TUI restart legs A (real
+   process restart → /resume → Sessions supervisor restores the OLD
+   session; the resumed session keeps its id — parks of the boot session
+   are recorded as DSH core behavior) and B (converted session: zero files,
+   supervisor lists 0 total). P-06 is one fresh client/mock/profile per case.
+4. dsh-incognito-bac — the web P-06 sweep had the same one-shared-client
+   problem, and the console gate's broken filter predicate let non-favicon
+   'Failed to load resource' errors escape both filters. Tightened to an
+   exact-URL allowlist; this immediately exposed what the old filter had
+   been covering: dsh-web core's /open-in-app/icon route 404s every session
+   on alpha.2 (host UI, not the plugin) — now explicitly allowlisted and
+   documented.
+5. dsh-incognito-18t — the closed release-run evidence was NUM_RUNS=25 once
+   per surface on one shared client, no seed recorded, not FC_SEED-
+   replayable: under the authorized round-3 budget (>=100 real-client cases
+   per surface over >=3 seeds; fast suites >=1000), and the close reason
+   overstated it ('25 fresh real clients each'). Fixed WITHOUT re-releasing:
+   release campaign re-run post-audit against the pinned tag's code
+   (TUI 100 cases, web 100 cases, seeds 20261012/13/14, per-case fresh
+   clients; fast suites at NUM_RUNS=1000), RELEASING.md's gate step updated
+   to the authorized budget, numbers recorded in TESTING.md.
+
+Also done in this round (evidence, not reopens): mutation campaign first run
+(3 planted mutants, caught 3/3; killed-by list in TESTING.md); RELEASING.md
+budget step corrected; fast-property timeouts wired so NUM_RUNS=1000 runs
+are actually executable (the first attempt hit vitest's 5 s default and
+failed all five toggle-lifecycle properties — timeout, not behavior);
+nix flake check + nix run .#e2e re-run green post-changes - nix flake check rc=0 at 20:34:00 (after the test hardening), then nix run .#e2e VERIFY PASS rc=0 at 20:34:34.
+nix-config notes: pin verified; the pkgs/dsh-incognito.nix comment line
+'alpha.1 pinned' is stale text (reported to the lead, untouched from this
+repo). dsh-TUI's upstream 'validate against 0.2.0-rc.2' banner on alpha.2
+noted for awareness.
+
+Commits this round: 6cbddcf (vzv/bac test hardening), 30eb116 (kr8 SPEC), 277892b (18t budget timeouts), the ROUND C docs commit,
+then the bd-export commit rendered by this section. Bead charges: all five reopened beads re-closed with the
+audit reasons; bd export committed with the ROUND C doc update.
+
