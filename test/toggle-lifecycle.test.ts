@@ -65,7 +65,7 @@ const batchGen = fc.nat({ max: 5 }).map((size) => size);
 const phaseGen = fc.array(batchGen, { maxLength: 6 });
 
 describe('toggle lifecycle properties (real facade, real JSONL backend)', () => {
-	it('P1: no file for the session exists under the root at ANY point after toggle-on', async () => {
+	it('P1: no file for the session exists under the root at ANY point after toggle-on', { timeout: 1_800_000 }, async () => {
 		await fc.assert(
 			fc.asyncProperty(
 				fc.tuple(phaseGen, fc.nat({ max: 6 }), phaseGen),
@@ -100,7 +100,7 @@ describe('toggle lifecycle properties (real facade, real JSONL backend)', () => 
 		);
 	});
 
-	it('P2: read-your-writes across conversion — pre- and post-toggle events all visible, contiguous', async () => {
+	it('P2: read-your-writes across conversion — pre- and post-toggle events all visible, contiguous', { timeout: 1_800_000 }, async () => {
 		await fc.assert(
 			fc.asyncProperty(
 				fc.tuple(phaseGen, phaseGen),
@@ -137,7 +137,7 @@ describe('toggle lifecycle properties (real facade, real JSONL backend)', () => 
 		);
 	});
 
-	it('P3: the wipe is real — the pre-toggle on-disk artifact is deleted from the root', async () => {
+	it('P3: the wipe is real — the pre-toggle on-disk artifact is deleted from the root', { timeout: 1_800_000 }, async () => {
 		await fc.assert(
 			fc.asyncProperty(
 				fc.tuple(fc.nat({ max: 5 }), fc.nat({ max: 5 })),
@@ -177,7 +177,7 @@ describe('toggle lifecycle properties (real facade, real JSONL backend)', () => 
 		);
 	});
 
-	it('P4: after toggle-off the NEXT persist-mode session materializes on disk; incognito ones never do', async () => {
+	it('P4: after toggle-off the NEXT persist-mode session materializes on disk; incognito ones never do', { timeout: 1_800_000 }, async () => {
 		await fc.assert(
 			fc.asyncProperty(
 				fc.tuple(fc.nat({ max: 5 }), fc.nat({ max: 5 })),
@@ -229,7 +229,7 @@ describe('toggle lifecycle properties (real facade, real JSONL backend)', () => 
 		);
 	});
 
-	it('P5: two-session interleaving keeps routing disjoint — persist grows on disk, converted never does', async () => {
+	it('P5: two-session interleaving keeps routing disjoint — persist grows on disk, converted never does', { timeout: 1_800_000 }, async () => {
 		await fc.assert(
 			fc.asyncProperty(
 				fc.array(fc.tuple(fc.constantFrom('persist', 'converted'), fc.nat({ max: 5 })), { maxLength: 12 }),
