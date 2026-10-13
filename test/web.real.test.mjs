@@ -8,7 +8,9 @@
 // Arms: persist baseline (P-01 web), mid-session toggle-on wipes and never
 // writes again (P-02/P-03/P-04 web — the composer CAN dispatch the plugin
 // command, so there is no web N/A), boot incognito via DSH_INCOGNITO=1
-// (P-06 web) with a fast-check burst sweep (NUM_RUNS, default 8).
+// (P-06 web) with a fast-check burst sweep: one fresh server, mock, profile and
+// browser per generated case (NUM_RUNS, default 8; the release campaign raises
+// it with FC_SEED/NUM_RUNS — TESTING.md records the seeds).
 import { describe, expect, it } from 'vitest';
 
 // The OFFLINE Nix suite check has no browser/tmux: it sets SKIP_REAL_CLIENT=1
@@ -66,8 +68,12 @@ async function makeWeb({ incognitoEnv = false } = {}) {
 	const browser = await chromium.launch({ headless: true, executablePath: CHROME, args: ['--no-sandbox'] });
 	const page = await browser.newPage();
 	const consoleErrors = [];
+	const resourceFailures = [];
 	page.on('console', (m) => { if (m.type() === 'error') consoleErrors.push(m.text()); });
 	page.on('pageerror', (e) => consoleErrors.push(String(e)));
+	// Chromium console text omits the URL; record failing responses explicitly
+	// so the allowlist can be exact about WHICH resource was not found.
+	page.on('response', (resp) => { if (resp.status() >= 400) resourceFailures.push(resp.status() + ' ' + resp.url()); });
 	await page.goto(web.url, { waitUntil: 'networkidle', timeout: 90000 });
 	// Dismiss the preview notice (mounts asynchronously — wait for it, click a
 	// dismiss label, wait for it to be gone), then choose the Home workspace.
@@ -90,7 +96,7 @@ async function makeWeb({ incognitoEnv = false } = {}) {
 	await page.waitForTimeout(2000);
 	const composer = page.locator('[aria-label*="commands"]').first();
 	await composer.waitFor({ state: 'visible', timeout: 30000 });
-	return { mock, profile, web, browser, page, composer, consoleErrors };
+	return { mock, profile, web, browser, page, composer, consoleErrors, resourceFailures };
 }
 
 async function chatTurn(page, composer, mock, turnsBefore) {
@@ -105,23 +111,35 @@ async function chatTurn(page, composer, mock, turnsBefore) {
 	throw new Error('chat turn never completed on web');
 }
 
-/** TUI/web share the invariant-asserting helper shape; allowlisted noise only. */
-function expectCleanConsole(consoleErrors) {
-	const noise = consoleErrors.filter((t) => /Failed to load resource.*404/.test(t) && /favicon/.test(t) === false ? true : /favicon/.test(t));
-	const real = consoleErrors.filter((t) => !t.includes('Failed to load resource'));
-	expect(real).toEqual([]);
-	expect(noise.length).toBe(consoleErrors.length);
+/** ONLY understood noise is allowlisted; everything else — any other 4xx/5xx
+ * resource load, console.error or uncaught page error — fails the arm. The old
+ * predicate allowed ANY non-favicon "Failed to load resource" error through
+ * by mistake (ROUND C closure audit); tightening it exposed the one real
+ * recurring 404: dsh web's own /open-in-app/icon route (UI core, not this
+ * plugin) responds 404 on 0.2.1-alpha.2 every session — the broad 404 filter
+ * had been covering it unknowingly. */
+const KNOWN_NOISE = [
+	/\/favicon\.ico(?:\?|$)/, // missing favicon: cosmetic, host-level
+	/\/open-in-app\/icon\//, // dsh-web core app-icon route 404s on 0.2.1-alpha.2
+];
+function expectCleanConsole(consoleErrors, resourceFailures = []) {
+	// "Failed to load resource ..." console texts carry no URL; the paired
+	// resourceFailures entries do, and they carry the allowlist verdict.
+	const unexplainedResources = resourceFailures.filter((t) => !KNOWN_NOISE.some((noise) => noise.test(t)));
+	expect(unexplainedResources).toEqual([]);
+	const unexplainedConsole = consoleErrors.filter((t) => !/^Failed to load resource/.test(t));
+	expect(unexplainedConsole).toEqual([]);
 }
 
 describeReal('dsh-incognito on real dsh web (headless Chromium)', () => {
 	it('P-01 web persist arm: a chatted session materializes server-side', { timeout: 180000 }, async () => {
-		const { mock, profile, web, browser, page, composer, consoleErrors } = await makeWeb();
+		const { mock, profile, web, browser, page, composer, consoleErrors, resourceFailures } = await makeWeb();
 		try {
 			await chatTurn(page, composer, mock, 0);
 			const files = sessionFiles(profile.dshHome);
 			expect(files.length).toBeGreaterThan(0);
 			expect(files.some((f) => f.endsWith('.jsonl') || f.endsWith('.zstd'))).toBe(true);
-			expectCleanConsole(consoleErrors);
+			expectCleanConsole(consoleErrors, resourceFailures);
 		} finally {
 			await browser.close();
 			await web.stop();
@@ -131,7 +149,7 @@ describeReal('dsh-incognito on real dsh web (headless Chromium)', () => {
 	});
 
 	it('P-02/P-03/P-04 web: /incognito from the composer wipes the current session server-side', { timeout: 240000 }, async () => {
-		const { mock, profile, web, browser, page, composer, consoleErrors } = await makeWeb();
+		const { mock, profile, web, browser, page, composer, consoleErrors, resourceFailures } = await makeWeb();
 		try {
 			await chatTurn(page, composer, mock, 0);
 			expect(sessionFiles(profile.dshHome).length).toBeGreaterThan(0);
@@ -152,7 +170,7 @@ describeReal('dsh-incognito on real dsh web (headless Chromium)', () => {
 			const turns = mock.turns().length;
 			await chatTurn(page, composer, mock, turns);
 			expect(sessionFiles(profile.dshHome)).toEqual([]);
-			expectCleanConsole(consoleErrors);
+			expectCleanConsole(consoleErrors, resourceFailures);
 		} finally {
 			await browser.close();
 			await web.stop();
@@ -161,27 +179,39 @@ describeReal('dsh-incognito on real dsh web (headless Chromium)', () => {
 		}
 	});
 
-	it('P-06 web boot incognito: DSH_INCOGNITO=1 means zero files across generated bursts', { timeout: 300000 }, async () => {
-		const { mock, profile, web, browser, page, composer, consoleErrors } = await makeWeb({ incognitoEnv: true });
-		try {
-			const bursts = fc.nat({ max: 3 });
-			await fc.assert(
-				fc.asyncProperty(bursts, async (n) => {
+	/** Boot-mode sweep options: release campaigns set NUM_RUNS + FC_SEED (+ FC_PATH for replay). */
+	function sweepOptions(defaultRuns) {
+		const numRuns = Number(process.env.NUM_RUNS ?? defaultRuns);
+		const seed = process.env.FC_SEED === undefined ? undefined : Number(process.env.FC_SEED);
+		const path = process.env.FC_PATH;
+		console.log(`[sweep] surface=web seed=${seed ?? 'fresh-per-run'} numRuns=${numRuns}${path ? ' path=' + path : ''}`);
+		return { numRuns, seed, path };
+	}
+
+	// Each generated case gets its OWN server, mock, profile and browser (per-case
+	// fixture isolation per testing.md); a failure replays via seed + path.
+	it('P-06 web boot incognito: DSH_INCOGNITO=1 means zero files across generated bursts (fresh server per case)', { timeout: 3600000 }, async () => {
+		await fc.assert(
+			fc.asyncProperty(fc.nat({ max: 3 }), async (n) => {
+				const arm = await makeWeb({ incognitoEnv: true });
+				const { mock, profile, web, browser, page, composer, consoleErrors, resourceFailures } = arm;
+				try {
 					let turns = mock.turns().length;
 					for (let i = 0; i < n; i += 1) {
 						await chatTurn(page, composer, mock, turns);
 						turns = mock.turns().length;
 						expect(sessionFiles(profile.dshHome)).toEqual([]);
 					}
-				}),
-				{ numRuns: Number(process.env.NUM_RUNS ?? 8) },
-			);
-			expectCleanConsole(consoleErrors);
-		} finally {
-			await browser.close();
-			await web.stop();
-			profile.dispose();
-			await mock.close();
-		}
+					expect(sessionFiles(profile.dshHome)).toEqual([]);
+					expectCleanConsole(consoleErrors, resourceFailures);
+				} finally {
+					await browser.close();
+					await web.stop();
+					profile.dispose();
+					await mock.close();
+				}
+			}),
+			sweepOptions(8),
+		);
 	});
 });

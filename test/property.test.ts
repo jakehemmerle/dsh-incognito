@@ -49,7 +49,7 @@ describe('IncognitoSessionStore properties', () => {
 					expect(store.stat(sid('p'))?.eventCount).toBe(seq);
 				},
 			),
-			{ numRuns: 100 },
+			{ numRuns: Number(process.env.NUM_RUNS ?? 100) },
 		);
 	});
 
@@ -76,7 +76,7 @@ describe('IncognitoSessionStore properties', () => {
 					expect(snapshot.eventCount).toBe(expected.get(snapshot.header.id));
 				}
 			}),
-			{ numRuns: 100 },
+			{ numRuns: Number(process.env.NUM_RUNS ?? 100) },
 		);
 	});
 });

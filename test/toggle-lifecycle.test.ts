@@ -96,7 +96,7 @@ describe('toggle lifecycle properties (real facade, real JSONL backend)', () => 
 					expect(filesForId(root, id)).toEqual([]);
 				},
 			),
-			{ numRuns: 30 },
+			{ numRuns: Number(process.env.NUM_RUNS ?? 30) },
 		);
 	});
 
@@ -133,7 +133,7 @@ describe('toggle lifecycle properties (real facade, real JSONL backend)', () => 
 					expect(facade.store.stat(sid(id))?.eventCount).toBe(seq);
 				},
 			),
-			{ numRuns: 30 },
+			{ numRuns: Number(process.env.NUM_RUNS ?? 30) },
 		);
 	});
 
@@ -173,7 +173,7 @@ describe('toggle lifecycle properties (real facade, real JSONL backend)', () => 
 					await handle.close();
 				},
 			),
-			{ numRuns: 30 },
+			{ numRuns: Number(process.env.NUM_RUNS ?? 30) },
 		);
 	});
 
@@ -225,7 +225,7 @@ describe('toggle lifecycle properties (real facade, real JSONL backend)', () => 
 					await off.close();
 				},
 			),
-			{ numRuns: 30 },
+			{ numRuns: Number(process.env.NUM_RUNS ?? 30) },
 		);
 	});
 
@@ -289,7 +289,7 @@ describe('toggle lifecycle properties (real facade, real JSONL backend)', () => 
 					await converted.close();
 				},
 			),
-			{ numRuns: 30 },
+			{ numRuns: Number(process.env.NUM_RUNS ?? 30) },
 		);
 	});
 });
