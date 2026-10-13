@@ -94,10 +94,10 @@ dsh version + package.json pins; **CFG**: `dsh --dump-config` composed row.
 | P-01 | **Persist mode writes session files**: a session created in persist mode materializes under the root and grows on disk after each flush | FS (files exist, size > 0) | verify arm baseline/persist | vzv arm | bac arm |
 | P-02 | **Incognito writes none**: a session created in incognito mode never creates any file under the root, checked after every append/flush | FS (tree empty for that id at every step) | verify arm incognito | vzv arm | bac arm |
 | P-03 | **The invocation session is the one converted**: `/incognito` converts exactly `invocation.agent.session.id`; other live write sessions stay durable and untouched | FS + MEM (per-id: converted id empty on disk with full in-memory log; others' files byte-count non-decreasing) | N/A (no slash commands in headless) | vzv (command path) | bac (composer dispatch — else documented N/A) |
-| P-04 | **Conversion is transactional (read → close → wipe → buffer)**: pre-toggle events survive in memory (read-your-writes), post-toggle appends never touch disk, and a failed wipe is never pretended as success | FS + MEM (contiguous seqs 0..n across the toggle; FS empty from the first post-wipe check) | facade-level (toggle-lifecycle P1–P3) | vzv re-drive | bac re-drive |
+| P-04 | **Conversion is transactional (read → close → wipe → buffer)**: pre-toggle events survive in memory (read-your-writes), post-toggle appends never touch disk, a failed wipe is never pretended as success, and a failed wipe restores the durable backing so the session stays durable, owned, and appendable | FS + MEM (contiguous seqs 0..n across the toggle; FS empty from the first post-wipe check; failed-wipe leg asserts the restored durable backing) | facade-level (toggle-lifecycle P1–P3 + wipe-failure R) | vzv re-drive | bac re-drive |
 | P-05 | **Toggle-off promise**: after toggle-off the current session keeps its in-memory backing; the next session created materializes on disk | FS + MEM (next id has files; current id never does) | facade-level (P4) | vzv | bac |
 | P-06 | **Boot mode**: `DSH_INCOGNITO=1` makes every session in that process memory-only; unset makes persist the default; parsed once at apply | FS (zero files all run) + CFG (plugin row present) | verify incognito arm | vzv env boot | bac env boot |
-| P-07 | **Restart erases incognito sessions**: stat/list lose in-memory ids after restart; resume throws `SessionPersistenceNotFoundError`; persist sessions resume normally | MEM + FS (restart on same profile) | vzv/bac restart leg | vzv | bac |
+| P-07 | **Restart erases incognito sessions**: stat/list lose in-memory ids after restart; resume throws `SessionPersistenceNotFoundError`; persist sessions resume normally | MEM + FS (restart on same profile: fresh service, fresh process) | facade-level (restart.test: both legs) + headless verify venvs | vzv legs A/B (real process restart, /resume supervisor) | fresh service (restart.test R1/R2); web restart UI not driven (see below) |
 | P-08 | **Visibility**: incognito sessions appear in stat/list process-locally with `eventCount`, no `sizeBytes`; durable ones carry `sizeBytes` | MEM (snapshot field shapes) | facade-level | — | — |
 | P-09 | **Degraded mode is loud and safe**: inner backend construction failure logs an error and a per-create warning; sessions stay in memory; boot does not crash | captured logger + FS (nothing written) | facade-level | — | — |
 | P-10 | **Exactly one sessionPersistence provider**: the profile patch disables `session-persistence-jsonl` and inserts the facade with a required `root`; the composed config shows exactly the facade row | CFG (dump-config row assertions) | profile-level | vzv fixture | bac fixture |
@@ -137,20 +137,49 @@ durable handle; `close()` drains in-flight durability work and releases
 single-writer ownership; only then is the session directory under the root
 removed (`rmSync -r`; a path outside the root refuses loudly; the wipe is never
 pretended); the buffer is registered and swapped in as the handle's backing.
-Known gap (bead `dql`): a wipe failure after close leaves the mode toggled and
-the inner handle closed; the SPEC's target invariant for dql is "a failed wipe
-leaves the session durable and usable" — the red test will drive that fix.
+
+**Failed-wipe semantics (bead dql, fixed in v0.1.0-alpha.2 by red a9b6b79 →
+fix 807e87f):** if the wipe fails after the durable handle was closed, the
+facade reopens the durable handle for write and swaps it back as the backing
+BEFORE rethrowing — a failed wipe leaves the session durable, owned, and
+appendable (`test/wipe-failure.test.ts`). The error then surfaces through the
+host command runtime, which settles a thrown handler as a `kind: 'error'
+`command/done` result (verified in dsh-commands 0.2.1-alpha.2 `lib/index.js`),
+so the failure is never silent.
+
+**Product decision — no mode rollback on conversion failure** (recorded this
+audit; implementation unchanged): `ModeStore` stays `incognito` after a failed
+wipe. Rationale: the mode is the user's deliberate request for sessions
+deemed private — transient conversion failures (e.g. an unwritable session
+parent) must not silently re-enable disk persistence for SESSIONS CREATED
+AFTER the failure; the failed conversion itself leaves the one affected
+session durable so no data is lost and appends keep working. A retry is the
+existing toggle: the user can flip the mode off at any time. Rolling the mode
+back would trade a documented, recoverable best-effort behavior for
+persistence of sessions the user explicitly asked to keep off disk.
+Session-scoped rollback alternative remains a future product decision; it is
+NOT implemented.
 
 ### Harness and budgets
 
-- Fast layer: vitest + fast-check, `NUM_RUNS`-style budgets ≥1000 for pure
-  properties (mode/store), stateful real-backend properties at ≥30/property on
-  per-run temp roots (release run raises per testing.md).
+- Fast layer: vitest + fast-check. Fast properties default to 100 cases
+  (property.test) / 30 cases (toggle-lifecycle real-backend, per-run temp
+  roots); the release run raises them through `NUM_RUNS` (set ≥1000 and
+  recorded in TESTING.md).
 - Whole-binary: `harness/verify.mjs` arms (baseline / plugin-persist /
   plugin-incognito + mode-flip sweep) on fresh virtual homes with the **vendored
   mock model** — no live credentials, no real provider calls (bead `jbm`).
 - Real clients: TUI via a real `dst` on a private tmux socket (bead `vzv`); web
   via Playwright on real `dsh web` (bead `bac`); each drives P-01–P-07 with the
-  real sessions tree as oracle.
-- Replay: every property prints seed + shrink path on failure; regression
+  real sessions tree as oracle. The P-06 boot-mode sweeps boot a FRESH client,
+  mock and profile per generated case; budget + seed come from `NUM_RUNS` and
+  `FC_SEED` (`FC_PATH` replays a failure). The release campaign runs ≥100
+  cases per surface across ≥3 logged seeds.
+- Replay: every property replays via `FC_SEED` + `FC_PATH`; regression
   minimizations land as named tests before fixes.
+- Web restart UI leg: not driven through the web UI; the same transition is
+  exercised at the facade level against a fresh service on the same root
+  (restart.test R1/R2 is exactly what a restarted web server process runs),
+  and the TUI legs prove the transition end-to-end in a real process. The web
+  column above records this reduced scope deliberately rather than as a
+  silent skip.
