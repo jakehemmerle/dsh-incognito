@@ -4,24 +4,24 @@
   inputs = {
     # Fleet nixpkgs pin (~/nix-config/flake.lock, node "nixpkgs").
     nixpkgs.url = "github:NixOS/nixpkgs/7fc6f2c20af09cdcaf48b92ec3121860139ec668";
-    # Fleet DSH 0.2.1-alpha.2 tree, pinned as a path input: its node_modules
+    # Fleet DSH 0.2.1-rc.2 tree, pinned as a path input: its node_modules
     # copies feed the plugin package's peer symlinks (in-closure, so the
     # bundle can resolve the same-version host modules). The RUNNING binary
     # used by devShell/checks/e2e is the literal dshStore path below - the
     # exact store build the nix-management launcher execs; dst is that same
     # binary with --profile dsh-tui.
-    dsh.url = "path:/nix/store/i24c2k38bz3h86r0v7bjr4amk7d4vxrj-dsh-0.2.1-alpha.2";
+    dsh.url = "path:/nix/store/l9m9bm830hjgs0xhi86wv8g3bgwlsyz6-dsh-0.2.1-rc.2";
     dsh.flake = false;
   };
 
   outputs = { self, nixpkgs, dsh }:
     let
-      # Fleet DSH 0.2.1-alpha.2 - the EXACT store build the nix-management
+      # Fleet DSH 0.2.1-rc.2 - the EXACT store build the nix-management
       # launcher execs (and dst: the same binary with --profile dsh-tui).
       # Referenced literally so the plugin resolves the host's own module
       # instances; the P-11 contract test fails the suite if this pin drifts
       # from package.json's exact peer pins.
-      dshStore = "/nix/store/i24c2k38bz3h86r0v7bjr4amk7d4vxrj-dsh-0.2.1-alpha.2";
+      dshStore = "/nix/store/l9m9bm830hjgs0xhi86wv8g3bgwlsyz6-dsh-0.2.1-rc.2";
       systems = [ "x86_64-linux" "aarch64-linux" "x86_64-darwin" "aarch64-darwin" ];
       forAllSystems = f: builtins.listToAttrs (map (s: { name = s; value = f s; }) systems);
       pluginMeta = builtins.fromJSON (builtins.readFile ./package.json);
@@ -43,7 +43,7 @@
             dontBuild = true;
             installPhase = ''
               mkdir -p $out/lib $out/node_modules/@deepseek-ai
-              esbuild src/index.ts --bundle --format=cjs --platform=node --target=node22 \
+              esbuild src/index.ts --bundle --format=esm --platform=node --target=node22 \
                 --packages=external --sourcemap --legal-comments=eof --log-level=warning \
                 --outfile=$out/lib/index.js
               cp package.json $out/package.json
@@ -69,7 +69,7 @@
             packages = [ pkgs.nodejs pkgs.pnpm pkgs.tmux pkgs.esbuild ];
             shellHook = ''
               export DSH_TELEMETRY_DISABLED=1
-              # Fleet-pinned dsh (0.2.1-alpha.2) and beads 1.3.0.
+              # Fleet-pinned dsh (0.2.1-rc.2) and beads 1.3.0.
               export PATH="${dshStore}/bin:/nix/store/8yhl7n32v992xlidv0jy53gyl4mgq8a3-beads-1.3.0/bin:$PATH"
               # dst shim: the pinned binary with the TUI profile, like the
               # nix-management launcher does.
@@ -90,7 +90,7 @@
             inherit (plugin) pname version;
             src = pkgs.lib.cleanSource ./.;
             fetcherVersion = 2;
-            hash = "sha512-Jx3TmiCHlZf8b6RYgVK7isOMaR47i3BwvqsjU0Gb95O2Ot4BDWzgC9rjYrByPxNdzWjnepwhcb3QJ4sSYztGQQ==";
+            hash = "sha512-bAPcjDA5R1SlEUfvKqrlDDu8/bfmdOp8uIMUr2eLM3NSxJ6Iv8x23tG5bdcjQUMALveNNzHEaBSCNMPfkIRPGQ==";
           };
         in {
           # Fast suites (vitest + tsc) against the exact pinned dsh: the

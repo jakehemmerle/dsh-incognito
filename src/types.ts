@@ -6,7 +6,7 @@ export type IncognitoMode = 'persist' | 'incognito';
 
 /**
  * Structurally the JSONL backend config: the facade forwards it verbatim to
- * the inner `JsonlSessionPersistence` child backend.
+ * DSH's `session-persistence-jsonl` plugin mounted on the isolated child scope.
  */
 export interface IncognitoPluginConfig {
   root: string;

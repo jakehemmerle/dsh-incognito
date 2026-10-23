@@ -52,7 +52,7 @@ One facade service over two backends, routed by ownership, not by current mode.
   session at `create()` time and decides the backing of *newly created* sessions. Toggling ON
   additionally converts the current live session in place (see the facade bullet); toggling OFF
   affects only sessions created afterwards.
-- Inner backend. `new JsonlSessionPersistence(childCtx, config)` inside `apply()`. Its tracker
+- Inner backend (superseded for DSH 0.2.1-rc.2, see SPEC §3 Seams: the jsonl plugin is mounted on the isolated child scope instead of constructing the no-longer-exported class). Originally: `new JsonlSessionPersistence(childCtx, config)` inside `apply()`. Its tracker
   listeners install on the child context; Cordis events fan out tree-wide, so agent emissions reach
   it. Construction failure enters degraded mode (log loudly, all sessions in-memory) instead of
   crashing boot. First smoke test must prove child-context fan-out works; if it does not, fall back

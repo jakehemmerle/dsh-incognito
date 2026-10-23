@@ -1,5 +1,13 @@
 # TESTING.md — traceability and evidence
 
+> **DSH 0.2.1-rc.2 port (0.1.0-rc.1, 2026-10-23):** every suite below was rerun
+> against DSH 0.2.1-rc.2 and dsh-TUI 0.16.1, with peers exactly 0.2.1-rc.2 /
+> cordis 4.0.5. Results: full suite 35/35; fast properties NUM_RUNS=1000
+> (seed 20261023) 7/7; P-06 sweeps 100 cases per surface over seeds
+> 20261023/24/25, all green; mutant caught by TUI and web P-01;
+> `nix flake check` and `nix run .#e2e` green. Details are in CHANGELOG.md
+> 0.1.0-rc.1. The alpha.2 evidence below is historical.
+
 Every property in SPEC.md §2 mapped to its tests, surfaces, and results.
 Versions under test: **DSH 0.2.1-alpha.2** (store `/nix/store/i24c2k38bz3h86r0v7bjr4amk7d4vxrj-dsh-0.2.1-alpha.2`),
 **dsh-TUI 0.14.0** (dst = the same binary with `--profile dsh-tui`), plugin peers
