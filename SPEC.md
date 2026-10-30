@@ -1,9 +1,10 @@
 # dsh-incognito SPEC
 
 Product and technical spec for the incognito session-persistence plugin, per the
-new-dsh-plugin specification guide. Versions under test: **DSH 0.2.1-alpha.2**
-(fleet alpha exception, 2026-10-10), **dsh-TUI 0.14.0**, plugin peers pinned
-exactly (dsh-* `0.2.1-alpha.2`, cordis `4.0.5-alpha.1`). Every property has a
+new-dsh-plugin specification guide. Versions under test: **DSH 0.2.1-rc.2**
+(the latest DSH release, 2026-10-23; supersedes the 0.2.1-alpha.2 exception),
+**dsh-TUI 0.16.1**, plugin peers pinned exactly (dsh-* `0.2.1-rc.2`, cordis
+`4.0.5`). Every property has a
 stable ID, an independent oracle (never the implementation), and a surface
 mapping. Where a surface cannot apply, the row says why.
 
@@ -113,12 +114,18 @@ not a silent skip.
 
 ## 3. Technical spec
 
-### Seams (verified against the installed alpha.2 tree)
+### Seams (verified against the installed rc.2 tree)
 
 - Service replacement: the facade provides `sessionPersistence`
-  (`static provide`), constructed on the plugin context; the inner
-  `JsonlSessionPersistence` is built on `ctx.extend().isolate('sessionPersistence')`
-  so cordis event fan-out reaches its tracker. Contract-guarded by the real
+  (`static provide`), constructed on the plugin context. The inner durable
+  backend is DSH's own `session-persistence-jsonl` plugin, mounted with
+  `ctx.plugin(jsonl, config)` on `ctx.extend().isolate('sessionPersistence')`
+  and read back through `inject(['sessionPersistence'])` in that scope.
+  DSH 0.2.1-rc.2 no longer exports `JsonlSessionPersistence` (only
+  `{ Config, JsonlCompressionSchema, apply, name }`; the class now needs a
+  backend tracker that `apply` installs), so the facade no longer constructs
+  it. Every facade operation awaits the mount; a mount failure enters
+  degraded mode. Contract-guarded by the real
   backend lifecycle tests (toggle-lifecycle suite).
 - Command seam: `ctx.commands.register({ definitionId, name, description,
   handler(invocation) })`; the handler receives `invocation.agent.session.id`

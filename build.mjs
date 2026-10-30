@@ -9,7 +9,7 @@ const result = await esbuild.build({
   entryPoints: ['src/index.ts'],
   outfile: 'lib/index.js',
   bundle: true,
-  format: 'cjs',
+  format: 'esm',
   platform: 'node',
   target: 'node22',
   packages: 'external',

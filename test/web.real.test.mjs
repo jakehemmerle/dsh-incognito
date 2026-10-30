@@ -88,12 +88,17 @@ async function makeWeb({ incognitoEnv = false } = {}) {
 		await overlay.waitFor({ state: 'hidden', timeout: 5000 }).catch(() => {});
 	}
 	await page.waitForTimeout(500);
-	await page.getByText('Choose workspace').first().click();
-	await page.waitForTimeout(800);
-	await page.locator('button, [role=button]').filter({ hasText: /^Home$/ }).first().click();
-	await page.waitForTimeout(800);
-	await page.locator('button, [role=button]').filter({ hasText: /^Open$/ }).first().click();
-	await page.waitForTimeout(2000);
+	// DSH 0.2.1-alpha.2 opened on a workspace chooser; 0.2.1-rc.2 opens with
+	// its "Default workspace" already selected and the composer ready.
+	const chooser = page.getByText('Choose workspace').first();
+	if (await chooser.isVisible().catch(() => false)) {
+		await chooser.click();
+		await page.waitForTimeout(800);
+		await page.locator('button, [role=button]').filter({ hasText: /^Home$/ }).first().click();
+		await page.waitForTimeout(800);
+		await page.locator('button, [role=button]').filter({ hasText: /^Open$/ }).first().click();
+		await page.waitForTimeout(2000);
+	}
 	const composer = page.locator('[aria-label*="commands"]').first();
 	await composer.waitFor({ state: 'visible', timeout: 30000 });
 	return { mock, profile, web, browser, page, composer, consoleErrors, resourceFailures };

@@ -17,7 +17,7 @@ import type {
 } from '@deepseek-ai/dsh-session-persistence';
 import { SessionLogOffset } from '@deepseek-ai/dsh-session';
 import type { SessionEvent, SessionHeader, SessionId } from '@deepseek-ai/dsh-session';
-import JsonlSessionPersistence from '@deepseek-ai/dsh-session-persistence-jsonl';
+import * as jsonlPlugin from '@deepseek-ai/dsh-session-persistence-jsonl';
 import { IncognitoSessionStore } from './incognito-store.ts';
 import { ModeStore } from './mode.ts';
 import type { IncognitoMode, IncognitoPluginConfig, ResolvedPluginConfig } from './types.ts';
@@ -36,7 +36,15 @@ export class IncognitoSessionPersistence extends SessionPersistence {
 	readonly store: IncognitoSessionStore;
 
 	private readonly config: ResolvedPluginConfig;
-	private inner: JsonlSessionPersistence | null = null;
+	/**
+	 * The durable JSONL backend, mounted as DSH's own plugin on an isolated
+	 * child scope. DSH 0.2.1-rc.2 no longer exports its service class; the
+	 * plugin's `apply` builds it (with its backend tracker) and provides it
+	 * as `sessionPersistence` inside that scope only.
+	 */
+	private inner: DurableBackend | null = null;
+	/** Settles once the inner backend is ready or has failed (degraded mode). */
+	private innerReady: Promise<void> = Promise.resolve();
 	private readonly logger: { info(message: string): unknown; warn(message: string): unknown };
 	/** Live facade write handles by id; the most recent is the conversion target. */
 	private readonly activeWrites = new Map<SessionId, FacadeWriteHandle>();
@@ -49,24 +57,65 @@ export class IncognitoSessionPersistence extends SessionPersistence {
 		this.logger = logger;
 	}
 
-	/** Construct the inner durable backend on a child context. Failure enters degraded mode. */
+	/**
+	 * Mount the inner durable backend on an isolated child scope. Failure to
+	 * start enters degraded mode (every session in memory, loudly logged).
+	 */
 	attachInner(): void {
-		mkdirSync(this.config.root, { recursive: true });
-		const childCtx = this.ctx.extend().isolate('sessionPersistence');
-		try {
-			this.inner = new JsonlSessionPersistence(childCtx as never, {
-				root: this.config.root,
-				...(this.config.compression !== undefined ? { compression: this.config.compression } : {}),
-			}) as JsonlSessionPersistence;
-		} catch (error) {
+		const degrade = (error: unknown): void => {
 			// eslint-disable-next-line no-console
 			console.error('[dsh-incognito] inner backend construction failed:', String(error));
 			this.inner = null;
 			this.logger.warn(`dsh-incognito: durable backend failed to start (${String(error)}); all sessions are in-memory and never touch disk`);
+		};
+		try {
+			mkdirSync(this.config.root, { recursive: true });
+		} catch (error) {
+			degrade(error);
+			return;
 		}
+		const childCtx = this.ctx.extend().isolate('sessionPersistence');
+		this.innerReady = new Promise<void>((resolveReady) => {
+			let settled = false;
+			const settle = (): void => {
+				if (!settled) {
+					settled = true;
+					resolveReady();
+				}
+			};
+			childCtx.inject(['sessionPersistence'], (scope) => {
+				const backend = scope.get('sessionPersistence') as DurableBackend;
+				this.inner = backend;
+				settle();
+				scope.effect(() => () => {
+					if (this.inner === backend) this.inner = null;
+				});
+			});
+			const fiber = childCtx.plugin(jsonlPlugin, {
+				root: this.config.root,
+				...(this.config.compression !== undefined ? { compression: this.config.compression } : {}),
+			});
+			Promise.resolve(fiber).then(
+				() => {
+					// A fiber that settled without providing the service failed to start.
+					if (this.inner === null) degrade(new Error('session-persistence-jsonl did not provide sessionPersistence'));
+					settle();
+				},
+				(error: unknown) => {
+					degrade(error);
+					settle();
+				},
+			);
+		});
+	}
+
+	/** Wait until the inner backend is mounted or known to have failed. */
+	private async ready(): Promise<void> {
+		await this.innerReady;
 	}
 
 	async create(header: SessionHeader, options?: SessionPersistenceCreateOptions): Promise<SessionHandle> {
+		await this.ready();
 		const inheritedEventCount = header.isSeeded ? options?.inheritedEventCount : 0;
 		if (header.isSeeded && (options?.inheritedEventCount === undefined || options.inheritedEventCount === 0)) {
 			throw new TypeError(`session "${header.id}": seeded create requires a non-zero inheritedEventCount`);
@@ -98,6 +147,7 @@ export class IncognitoSessionPersistence extends SessionPersistence {
 	}
 
 	async open(id: SessionId, access: SessionAccess, options?: SessionPersistenceOpenOptions): Promise<SessionHandle> {
+		await this.ready();
 		if (this.store.owns(id)) {
 			const backing = this.store.open(id, access);
 			return access === 'write' ? this.trackWriteHandle(backing) : backing;
@@ -123,6 +173,7 @@ export class IncognitoSessionPersistence extends SessionPersistence {
 	 * recent live write handle is targeted.
 	 */
 	async toggle(requestedId?: SessionId): Promise<{ mode: IncognitoMode; outcome: 'converted' | 'in-memory' | 'none' }> {
+		await this.ready();
 		const mode = this.modeStore.toggle();
 		if (!this.modeStore.isIncognito()) return { mode, outcome: 'none' };
 		let facadeHandle: FacadeWriteHandle | undefined;
@@ -186,6 +237,7 @@ export class IncognitoSessionPersistence extends SessionPersistence {
 
 	/** Flush every live write handle. */
 	async flush(): Promise<void> {
+		await this.ready();
 		const errors: unknown[] = [];
 		try {
 			await this.inner?.flush();
@@ -203,11 +255,13 @@ export class IncognitoSessionPersistence extends SessionPersistence {
 	}
 
 	async stat(id: SessionId, options?: SessionPersistenceStatOptions): Promise<SessionPersistenceSnapshot | undefined> {
+		await this.ready();
 		if (this.store.owns(id)) return this.store.stat(id);
 		return this.inner?.stat(id, options);
 	}
 
 	async list(options?: SessionPersistenceListOptions): Promise<readonly SessionPersistenceSnapshot[]> {
+		await this.ready();
 		const durable = this.inner === null ? [] : [...await this.inner.list(options)];
 		const incognito = this.store.list();
 		const owned = new Set(incognito.map((snapshot) => snapshot.header.id));
@@ -233,6 +287,14 @@ export class IncognitoSessionPersistence extends SessionPersistence {
 		await parent.close();
 		return slice.events;
 	}
+}
+
+/**
+ * What the facade uses of the JSONL backend: the public persistence API plus
+ * `resolveCurrentLog`, which locates the on-disk log the toggle wipes.
+ */
+export interface DurableBackend extends SessionPersistence {
+	resolveCurrentLog(id: SessionId, signal?: AbortSignal): Promise<string | undefined>;
 }
 
 export interface ApplyConfig {

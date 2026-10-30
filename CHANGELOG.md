@@ -1,5 +1,41 @@
 # Changelog
 
+## 0.1.0-rc.1 (unreleased; branch feat/dsh-rc2-port)
+
+Port to DSH 0.2.1-rc.2. No user-visible behavior change.
+
+- **Fixed:** the plugin could not load on DSH 0.2.1-rc.2. rc.2's
+  `@deepseek-ai/dsh-session-persistence-jsonl` no longer default-exports
+  `JsonlSessionPersistence`; it exports the plugin (`apply`/`Config`/`name`),
+  whose `apply` builds the backend together with its tracker. The facade now
+  mounts that plugin on the isolated `sessionPersistence` child scope and reads
+  the backend back through `inject`; every facade operation awaits the mount,
+  and a failed mount enters degraded mode as before.
+- **Changed:** the bundle is ESM (`"type": "module"`). rc.2 imports plugin rows
+  concurrently, and the CJS bundle's `require()` of the host's ESM packages
+  failed with `ERR_REQUIRE_ESM_RACE_CONDITION`.
+- **Peers:** exactly `@deepseek-ai/dsh-*` 0.2.1-rc.2 and cordis 4.0.5.
+- **Tests:** the web real-client driver accepts rc.2's preselected default
+  workspace (alpha.2 opened on a workspace chooser).
+- **Tested against:** DSH 0.2.1-rc.2 (fleet patched store build
+  `/nix/store/l9m9bm830hjgs0xhi86wv8g3bgwlsyz6-dsh-0.2.1-rc.2`), dsh-TUI 0.16.1
+  (nix-config fleet build `/nix/store/ij4q915vdsagwrgsdbwpwka5lxd16hzn-dsh-tui-0.16.1`),
+  commit 70d3f71 (code; this entry is docs only). Evidence, 2026-10-23:
+  - red: the previous `src/service.ts` against rc.2 fails 6/7 facade tests
+    (toggle-target R1/R2, toggle-lifecycle P2-P5: `default is not a constructor`);
+  - full `vitest run` with real clients: 35/35;
+  - fast properties `NUM_RUNS=1000 FC_SEED=20261023`: 7/7 (418 s);
+  - release sweeps P-06, one fresh client/server per case: TUI and web each
+    34 + 33 + 33 = 100 cases over seeds 20261023/24/25, all green
+    (TUI 131/126/122 s, web 190/188/185 s);
+  - mutant (inner backend never assigned) caught by TUI P-01 and web P-01;
+  - `nix flake check` green; `nix run .#e2e` VERIFY PASS;
+  - nix-config fleet smoke (isolated DSH_HOME): dst persist turn writes a
+    session, `/incognito` wipes it and later turns write nothing,
+    `DSH_INCOGNITO=1` boot writes nothing, dsh web boots with no plugin
+    warnings.
+- GitHub Actions is unavailable (billing); the local checks above are the gate.
+
 ## 0.1.0-alpha.2 (2026-10-12)
 
 Durability fix release, cut before fleet rollout so hosts get the conversion
