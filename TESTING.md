@@ -8,6 +8,18 @@
 > `nix flake check` and `nix run .#e2e` green. Details are in CHANGELOG.md
 > 0.1.0-rc.1. The alpha.2 evidence below is historical.
 
+> **v0.1.0-rc.1 release gate (2026-10-30, mbp, commit 5a274eb on main):** DSH
+> 0.2.1-rc.2 (`DSH_BIN=/nix/store/l9m9bm830hjgs0xhi86wv8g3bgwlsyz6-dsh-0.2.1-rc.2/bin/dsh`),
+> dsh-TUI 0.16.1 (`DSH_TUI_DIR` = `/nix/store/ij4q915vdsagwrgsdbwpwka5lxd16hzn-dsh-tui-0.16.1`'s
+> package), headless Chromium (`CHROMIUM_PATH` = Playwright chromium-1217),
+> node v24.16.0, pnpm 12.11.2; fresh clone, `corepack pnpm build` first (the
+> real-client suites and verify load `lib/index.js`). Results: typecheck green;
+> full suite 35/35 (real-client TUI 6/6, web 3/3 executed); `node
+> harness/verify.mjs` VERIFY PASS; fast properties NUM_RUNS=1000 (seed
+> 20261030) 7/7; P-06 sweeps NUM_RUNS=34/33/33 × seeds 20261030/31/32 =
+> **100 cases per surface (TUI, web), all green**; `nix flake check` all checks
+> passed; `nix run .#e2e` VERIFY PASS.
+
 Every property in SPEC.md §2 mapped to its tests, surfaces, and results.
 Versions under test: **DSH 0.2.1-alpha.2** (store `/nix/store/i24c2k38bz3h86r0v7bjr4amk7d4vxrj-dsh-0.2.1-alpha.2`),
 **dsh-TUI 0.14.0** (dst = the same binary with `--profile dsh-tui`), plugin peers

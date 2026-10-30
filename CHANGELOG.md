@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.1.0-rc.1 (unreleased; branch feat/dsh-rc2-port)
+## 0.1.0-rc.1 (2026-10-30)
 
 Port to DSH 0.2.1-rc.2. No user-visible behavior change.
 
@@ -34,6 +34,22 @@ Port to DSH 0.2.1-rc.2. No user-visible behavior change.
     session, `/incognito` wipes it and later turns write nothing,
     `DSH_INCOGNITO=1` boot writes nothing, dsh web boots with no plugin
     warnings.
+- **Release gate (2026-10-30, mbp; commit tested 5a274eb, the merge of PR #1
+  on main):** DSH 0.2.1-rc.2 (`DSH_BIN` = the pinned store build above),
+  dsh-TUI 0.16.1 (`DSH_TUI_DIR` = the store build above), headless Chromium
+  (Playwright chromium-1217), node v24.16.0, pnpm 12.11.2. Fresh clone, after
+  `corepack pnpm install --frozen-lockfile && corepack pnpm build`:
+  - `corepack pnpm typecheck` green; `corepack pnpm test` 35/35 (9 files;
+    real-client TUI 6/6 and web 3/3 executed, none skipped);
+  - `node harness/verify.mjs` VERIFY PASS;
+  - fast properties `NUM_RUNS=1000 FC_SEED=20261030` (property.test +
+    toggle-lifecycle): 7/7 (310 s);
+  - P-06 release sweeps, one fresh client/server per case: TUI and web each
+    34 + 33 + 33 = 100 cases over seeds 20261030/31/32, all green
+    (TUI 120/133/126 s, web 185/182/177 s);
+  - `nix flake check` all checks passed; `nix run .#e2e` VERIFY PASS;
+  - open beads: only the umbrella epic dsh-incognito-b1r (fleet rollout
+    follows the release); no release blockers.
 - GitHub Actions is unavailable (billing); the local checks above are the gate.
 
 ## 0.1.0-alpha.2 (2026-10-12)
